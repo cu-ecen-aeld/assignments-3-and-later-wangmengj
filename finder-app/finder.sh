@@ -19,7 +19,7 @@ then
 
 fi
 
-fNum=$(grep -r -c "$2" "$1"  | grep -v ":0" | wc -l)
-lNum=$(grep -r -c "$2" "$1"  | grep -v ":0" | awk ' BEGIN {FS="\:"} {s+=$2} END {print s}')
+fNum=$(find "$1"  -type f | wc -l)
+lNum=$(grep -r -c "$2" "$1"  | grep -v ":0" | awk ' BEGIN {FS="\:";s=0 } {s+=$2} END {print s}')
 
 echo "The number of files are $fNum and the number of matching lines are $lNum"
