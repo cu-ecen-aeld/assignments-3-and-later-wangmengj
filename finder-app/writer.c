@@ -14,11 +14,6 @@
 #define ERRLOG(...) syslog(LOG_ERR,__VA_ARGS__) 
 #endif 
 
-
-bool isDirectory(char *dirName);
-bool isRegFile(char *fileName);
-
-
 int main(int argc, char * argv[]) 
 {
 #if !defined (LOGCONSOLE) 
