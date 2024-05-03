@@ -135,12 +135,19 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         S_IRUSR|S_IWUSR| S_IRGRP| S_IROTH );
     if(-1 == fd)
     {
-        printf("file create: %s\n", outputfile);
-
         va_end(args);
         return false;
     }
 
+    // save the old stdout.
+    int savedStdout = dup(1); 
+    if(-1 == savedStdout)
+    {
+        va_end(args);
+        return false;
+    }
+
+    // redirect to the file
     if(dup2(fd,1) <0)   
     {
         printf("file create 2: %s\n", outputfile);
@@ -148,6 +155,9 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         va_end(args);
         return false;
     }
+
+    // close file
+    close(fd);
 
     // fork 
     pid_t pRetFork = fork();
@@ -158,7 +168,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         return false;
     }
 
-    close(fd);
     if(0 == pRetFork)
     {
         // We are in child process and return only failed.
@@ -169,6 +178,10 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     else 
     {
         // we are in parent process
+        // restore stdio for parent process
+        dup2(savedStdout,1);
+        close(savedStdout);
+
         int iWS;  
         int iRet = wait(&iWS);
 
@@ -180,6 +193,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
             return false;
     }
 
-    // return only when error occurs.
-    return true;
+    // the program should not reach here.
+    return false;
 }
