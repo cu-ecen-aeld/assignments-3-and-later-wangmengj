@@ -1,3 +1,10 @@
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include "systemcalls.h"
 
 /**
@@ -17,7 +24,14 @@ bool do_system(const char *cmd)
  *   or false() if it returned a failure
 */
 
-    return true;
+    // make sure the cmd is valid.
+    if(NULL == cmd)
+        return false;
+
+    int iRet = system(cmd);
+    if ( (-1 != iRet) && WIFEXITED(iRet) && EXIT_SUCCESS == WEXITSTATUS(iRet) )
+        return true;
+    return false;
 }
 
 /**
@@ -58,8 +72,34 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    pid_t pRetFork = fork();
+    if(-1 == pRetFork)
+    {
+        // if something wrong happened, 
+        va_end(args);
+        return false;
+    }
 
-    va_end(args);
+    if(0 == pRetFork)
+    {
+        // We are in child process and return only failed.
+        execv(command[0], command);
+        va_end(args);
+        exit(-1);
+    }
+    else 
+    {
+        // we are in parent process
+        int iWS;  
+        int iRet = wait(&iWS);
+
+        va_end(args);
+
+        if ( (-1 != iRet) && WIFEXITED(iWS) && (EXIT_SUCCESS == WEXITSTATUS(iWS)) )
+            return true;
+        else 
+            return false;
+    }
 
     return true;
 }
@@ -84,7 +124,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     // and may be removed
     command[count] = command[count];
 
-
 /*
  * TODO
  *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
@@ -92,8 +131,55 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 
+        S_IRUSR|S_IWUSR| S_IRGRP| S_IROTH );
+    if(-1 == fd)
+    {
+        printf("file create: %s\n", outputfile);
 
-    va_end(args);
+        va_end(args);
+        return false;
+    }
 
+    if(dup2(fd,1) <0)   
+    {
+        printf("file create 2: %s\n", outputfile);
+        close(fd);
+        va_end(args);
+        return false;
+    }
+
+    // fork 
+    pid_t pRetFork = fork();
+    if(-1 == pRetFork)
+    {
+        // if something wrong happens, 
+        va_end(args);
+        return false;
+    }
+
+    close(fd);
+    if(0 == pRetFork)
+    {
+        // We are in child process and return only failed.
+        execv(command[0], command);
+        va_end(args);
+        exit(-1);
+    }
+    else 
+    {
+        // we are in parent process
+        int iWS;  
+        int iRet = wait(&iWS);
+
+        va_end(args);
+
+        if ( (-1 != iRet) && WIFEXITED(iWS) && (EXIT_SUCCESS == WEXITSTATUS(iWS)) )
+            return true;
+        else 
+            return false;
+    }
+
+    // return only when error occurs.
     return true;
 }
