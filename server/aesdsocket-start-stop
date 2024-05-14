@@ -16,8 +16,7 @@ start() {
 	#start-stop-daemon -b -m -S -q -p "$PIDFILE" -x "/sbin/$DAEMON" \
 	#	-- -n $KLOGD_ARGS
 	
-	start-stop-daemon -b -m -S -q "$PIDFILE" -x "/bin/$DAEMON" \
-		-- $AESD_ARGS
+	start-stop-daemon --start --quiet --pidfile "$PIDFILE" -x "/bin/$DAEMON"  -- $AESD_ARGS
 	status=$?
 	if [ "$status" -eq 0 ]; then
 		echo "OK"
@@ -29,7 +28,7 @@ start() {
 
 stop() {
 	printf 'Stopping %s: ' "$DAEMON"
-	start-stop-daemon -K -q -p "$PIDFILE"
+	start-stop-daemon --stop --quiet --oknodo --pidfile "$PIDFILE"
 	status=$?
 	if [ "$status" -eq 0 ]; then
 		rm -f "$PIDFILE"

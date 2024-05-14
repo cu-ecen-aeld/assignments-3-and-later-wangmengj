@@ -21,6 +21,7 @@
 // ipv6 takes 39 characters
 #define IP_LENTH 39
 #define OUTPUT_FILENAME "/var/tmp/aesdsocketdata"
+#define PID_FILE "/var/run/aesdsocket.pid"
 
 //#define LOGCONSOLE 
 
@@ -79,13 +80,6 @@ int main(int argc, char * argv[])
         DBGLOG("setsockopt:SO_REUSEPORT failed.");
 #endif
 
-/*
-    struct linger lin;
-    lin.l_onoff = 0;
-    lin.l_linger = 0;
-    setsockopt(sdListen, SOL_SOCKET, SO_LINGER, (const char *)&lin, sizeof(int));
-*/
-
     struct addrinfo serverAdd;  
     struct addrinfo *addInfo = NULL;  
     memset(&serverAdd, 0, sizeof(serverAdd));
@@ -108,9 +102,9 @@ int main(int argc, char * argv[])
         struct sockaddr_in *addr = (struct sockaddr_in *)cur->ai_addr;
         char ipbuf[16];
         int port;
-        printf("ip: %s\n", inet_ntop(AF_INET, &addr->sin_addr, ipbuf, 16));
-        printf("port: %s\n", inet_ntop(AF_INET, &addr->sin_port, (void *)&port, 2));
-        printf("- family: %d\n", addr->sin_family);
+        DBGLOG("ip: %s\n", inet_ntop(AF_INET, &addr->sin_addr, ipbuf, 16));
+        DBGLOG("port: %s\n", inet_ntop(AF_INET, &addr->sin_port, (void *)&port, 2));
+        DBGLOG("- family: %d\n", addr->sin_family);
 
         // try other addresses ....
         if(0!= bind(sdListen, cur->ai_addr, cur->ai_addrlen))
@@ -155,6 +149,15 @@ int main(int argc, char * argv[])
         }
         else
         {
+            // record child process id
+            FILE * pidfile = fopen(PID_FILE, "w");
+            if(NULL != pidfile)
+            {
+                DBGLOG("creating pid file.");
+                fprintf(pidfile, "%d", pRetFork);
+                fclose(pidfile);
+            }
+
             // we are in parent process
             freeaddrinfo(addInfo);
             close(sdListen);
