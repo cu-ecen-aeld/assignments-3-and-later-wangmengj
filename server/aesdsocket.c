@@ -22,7 +22,7 @@
 #define IP_LENTH 39
 #define OUTPUT_FILENAME "/var/tmp/aesdsocketdata"
 
-#define LOGCONSOLE 
+//#define LOGCONSOLE 
 
 #if defined (LOGCONSOLE)
 #define DBGLOG(...) printf (__VA_ARGS__)
@@ -101,9 +101,34 @@ int main(int argc, char * argv[])
         return -1;
     }
 
-    if(0!= bind(sdListen, addInfo->ai_addr, addInfo->ai_addrlen))
+    // test a 
+    bool bBind = false;
+    for(struct addrinfo * cur = addInfo ; cur != NULL ; cur = cur->ai_next)
     {
-        ERRLOG("bind failed: %s \n", strerror(errno));
+        struct sockaddr_in *addr = (struct sockaddr_in *)cur->ai_addr;
+        char ipbuf[16];
+        int port;
+        printf("ip: %s\n", inet_ntop(AF_INET, &addr->sin_addr, ipbuf, 16));
+        printf("port: %s\n", inet_ntop(AF_INET, &addr->sin_port, (void *)&port, 2));
+        printf("- family: %d\n", addr->sin_family);
+
+        // try other addresses ....
+        if(0!= bind(sdListen, cur->ai_addr, cur->ai_addrlen))
+        {
+            ERRLOG("bind failed: %s, try next one. \n", strerror(errno));
+            continue;
+        }
+        else
+        {
+            // success in binding ... 
+            bBind = true;
+            break;
+        }
+    }
+
+    if(!bBind)
+    {
+        ERRLOG("all bind failed: %s \n", strerror(errno));
         freeaddrinfo(addInfo);
         close(sdListen);
         return -1;
@@ -126,6 +151,7 @@ int main(int argc, char * argv[])
         {
             // We are in child process and return only failed.
             // child process continues ... 
+            //if(-1 == setsid())
         }
         else
         {
