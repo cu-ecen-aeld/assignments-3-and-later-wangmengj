@@ -323,8 +323,9 @@ int main(int argc, char * argv[])
         free(pTmp);
     }
     
-successExit:
     fclose(fOutput);
+
+successExit:
     freeaddrinfo(addInfo);
     close(sdListen);
 #if !defined (LOGCONSOLE)
