@@ -1,10 +1,10 @@
 CC=$(CROSS_COMPILE)gcc
-CFLAGS= -g -Wall -Werror
+CFLAGS= -g -Wall -Werror -pthread
 
 default: aesdsocket
 all: aesdsocket 
 aesdsocket: aesdsocket.o
-	$(CC) aesdsocket.o -o aesdsocket
+	$(CC) aesdsocket.o -pthread -o aesdsocket
 aesdsocket.o: aesdsocket.c
 	$(CC) -c ${CFLAGS}  aesdsocket.c -o aesdsocket.o
 clean:   

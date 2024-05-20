@@ -16,6 +16,9 @@
 #include <errno.h>
 #include <time.h>
 
+#include <pthread.h>
+#include <sys/time.h>
+
 #define SIZE_BUFFER 1000
 #define STR_PORT "9000"
 // ipv6 takes 39 characters
@@ -23,7 +26,7 @@
 #define OUTPUT_FILENAME "/var/tmp/aesdsocketdata"
 #define PID_FILE "/var/run/aesdsocket.pid"
 
-//#define LOGCONSOLE 
+#define LOGCONSOLE 
 
 #if defined (LOGCONSOLE)
 #define DBGLOG(...) printf (__VA_ARGS__)
@@ -33,10 +36,31 @@
 #define ERRLOG(...) syslog(LOG_ERR,__VA_ARGS__) 
 #endif
 
+
+// thread realted items;
+struct listOfThread 
+{
+    pthread_t thread; 
+    int sdClient;
+    char strIP[IP_LENTH];
+
+    struct listOfThread * pNext;
+    struct listOfThread * pPrevious;
+};
+
+// static items 
+static struct listOfThread * pListHead = NULL;
+static struct listOfThread * pListTail = NULL;
+static pthread_mutex_t mutexFOutput;
+
+void * threadHandler(void *);
+
+
 int strGetIP(const struct sockaddr *sa, char *s, size_t maxlen);
 void signalHandler(int signal);
 
 bool quitServices = false;
+bool isAlarmed = false;
 
 int main(int argc, char * argv[])
 {
@@ -49,26 +73,32 @@ int main(int argc, char * argv[])
     if(SIG_ERR == signal(SIGPIPE, SIG_IGN))
     {
         ERRLOG("Ignore SIGPIPE failed: %s \n", strerror(errno));
-        return -1;
+        goto closelog;
     }
 
     if(SIG_ERR == signal(SIGINT, signalHandler))
     {
         ERRLOG("Register SIGINT failed: %s \n", strerror(errno));
-        return -1;
+        goto closelog;
     }
 
     if(SIG_ERR == signal(SIGTERM, signalHandler))
     {
         ERRLOG("Register SIGTERM failed: %s \n", strerror(errno));
-        return -1;
+        goto closelog;
+    }
+
+    if(SIG_ERR == signal(SIGALRM, signalHandler))
+    {
+        ERRLOG("Register SIGALRM failed: %s \n", strerror(errno));
+        goto closelog;
     }
     
     int sdListen = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if(-1 == sdListen)
     {
         ERRLOG("Get socket failed: %s \n", strerror(errno));
-        return -1;
+        goto closelog;
     }
 
     int iVar = 1;
@@ -91,8 +121,7 @@ int main(int argc, char * argv[])
     if(0 != getaddrinfo(NULL, STR_PORT, &serverAdd, &addInfo))
     {
         ERRLOG("getaddrinfo failed: %s \n", strerror(errno));
-        close(sdListen);
-        return -1;
+        goto closeSDListen;
     }
 
     // test a 
@@ -123,9 +152,7 @@ int main(int argc, char * argv[])
     if(!bBind)
     {
         ERRLOG("all bind failed: %s \n", strerror(errno));
-        freeaddrinfo(addInfo);
-        close(sdListen);
-        return -1;
+        goto freeAddrinfo;
     }
 
     if(argc > 1 && NULL != argv[1] && 0 == strcmp("-d", argv[1]))
@@ -136,9 +163,7 @@ int main(int argc, char * argv[])
         if(-1 == pRetFork)
         {
             // if something wrong happened,
-            freeaddrinfo(addInfo);
-            close(sdListen);
-            return -1;
+            goto freeAddrinfo;
         }
 
         if(0 == pRetFork)
@@ -159,35 +184,71 @@ int main(int argc, char * argv[])
             }
 
             // we are in parent process
-            freeaddrinfo(addInfo);
-            close(sdListen);
-            return 0;
+            goto successExit;
         }
     }
 
     if(0 != listen(sdListen, 10))
     {
         ERRLOG("listen failed: %s \n", strerror(errno));
-        freeaddrinfo(addInfo);
-        close(sdListen);
-        return -1;
+        goto freeAddrinfo;
     }
 
     FILE * fOutput = fopen(OUTPUT_FILENAME, "a+");
     if(NULL == fOutput)
     {
         ERRLOG("fopen failed: %s \n", strerror(errno));
-        freeaddrinfo(addInfo);
-        close(sdListen);
-        return -1;
+        goto freeAddrinfo;
     }
 
+    // setup a timer for every 10s 
+    struct itimerval newValue;
+    newValue.it_interval.tv_sec = 10; // every 10 seconds
+    newValue.it_interval.tv_usec = 0;
+    newValue.it_value = newValue.it_interval;
+    if(-1 == setitimer(ITIMER_REAL, &newValue, NULL))
+    {
+        DBGLOG("setitimer failed: %s \n", strerror(errno));
+    }
+    
+    time_t t = time(NULL);
     // start services:
     while(!quitServices)
     {
         struct sockaddr clientAddr; 
         socklen_t clientAddrLen = sizeof(clientAddr) ; 
         memset(&clientAddr, 0, sizeof(clientAddr));
+
+        if(isAlarmed)
+        {
+            isAlarmed = false;
+            //RFC 2822-compliant date format with a newline
+            //  (with an English locale for %a and %b)
+            char strRFC2822[] = "timestamp:%a, %d %b %Y %T %z\n";
+
+            t = time(NULL);
+            struct tm * tmp = localtime(&t);
+            if(NULL != tmp)
+            {
+                char tmString[200];
+                int iRet = strftime(tmString, sizeof(tmString), strRFC2822, tmp);
+                if(0 != iRet)
+                {
+                    tmString[iRet]= '\0';
+                    DBGLOG("alarm triggerd: %s \n", tmString);
+                    pthread_mutex_lock(&(mutexFOutput));
+                    fseek(fOutput, 0L, SEEK_END); 
+                    fwrite(tmString, 1 , iRet, fOutput);
+                    fflush(fOutput);
+                    pthread_mutex_unlock(&(mutexFOutput));
+                }
+                else 
+                   DBGLOG("strftime returned 0: %s \n", strerror(errno));
+
+            }
+            else 
+                DBGLOG("Incorrect NULL locatime: %s \n", strerror(errno));
+        }
 
         int sdClient = accept(sdListen, &clientAddr, &clientAddrLen);
         if(-1 == sdClient)
@@ -198,78 +259,95 @@ int main(int argc, char * argv[])
             ERRLOG("accept failed: %s \n", strerror(errno));
             break;
         }
+        
+        struct listOfThread * pList = malloc(sizeof(struct listOfThread));
+        if(NULL == pList)
+        {
+            // running out of memory?
+            ERRLOG(" failed malloc pList: %s \n", strerror(errno));
+            break;
+        }
 
         // get the ip address of the client:
-        char strIP[IP_LENTH]; 
-        memset(strIP, 0, IP_LENTH);
-        strGetIP(&clientAddr, strIP, IP_LENTH);
-        time_t t = time(NULL);
-        DBGLOG("Accepted connection from %s , %d @ %s.\n", strIP, sdClient, ctime(&t));
+        memset(pList->strIP, 0, IP_LENTH);
+        strGetIP(&clientAddr, pList->strIP, IP_LENTH);
+        DBGLOG("Accepted connection from %s , %d @ %s.\n", 
+                pList->strIP, sdClient, ctime(&t));
 
-        /// prepare a buffer for the transfer of the data
-        char buffer[SIZE_BUFFER];
-        memset(buffer, 0, SIZE_BUFFER);
 
-        // point to the end of the file to start:
-        fseek(fOutput, 0L, SEEK_END); 
+        pList->pNext = NULL;
+        pList->pPrevious = NULL;
+        pList->sdClient = sdClient;
 
-        // receive all packages/data
-        int iReceived = 0;
-        do
+        if(NULL == pListHead)
+            pListHead = pList;
+        if(NULL == pListTail)
+            pListTail = pList;
+        else
         {
-            iReceived = recv(sdClient, buffer, SIZE_BUFFER, MSG_DONTWAIT);
-            if(0 < iReceived)
-            {
-                int iRet = fwrite(buffer, 1 , iReceived, fOutput);
-                DBGLOG("Data saved: %d vs received: %d, %d. \n", 
-                        iRet, iReceived, (int) buffer[iReceived - 1]);
-
-                // quit receving when a full packet is received.
-                if('\n' == buffer[iReceived - 1]) 
-                {
-                    t = time(NULL);
-                    DBGLOG("Full package: %d vs received: %d, %s. \n", 
-                        iRet, iReceived, ctime(&t));
-                    break;
-                }
-            }
-
-        } while(((errno == EAGAIN || errno == EWOULDBLOCK) && iReceived <0) || (iReceived > 0));
-
-        // really finsihed recving? 
-        t = time(NULL);
-        DBGLOG("Data saved other: %d , %s at %s  \n", iReceived, strerror(errno), ctime(&t));
-
-        // make sure all data saved to file.
-        fflush(fOutput);
-        rewind(fOutput);
-
-        iReceived = 0;
-        // send everything in the file to the client.
-        while(0 < (iReceived = fread(buffer, 1, SIZE_BUFFER, fOutput)))
-        {
-            buffer[iReceived] = '\0'; 
-            int iRet = send(sdClient, buffer, iReceived, 0);
-            DBGLOG("Data send: %d vs read: %d, %s \n", iRet, iReceived, buffer);
+            pList->pPrevious = pListTail;
+            pListTail->pNext = pList;
+            pListTail=pList;
         }
-        
-        DBGLOG("Closed connection from %s\n", strIP);
-        close(sdClient);
+
+        int iRet = pthread_create(&(pList->thread),NULL, &threadHandler, pList); 
+        if(0 != iRet)
+        {
+            // when thread created wrong, will remove it from list:
+            pListTail = pList->pPrevious;
+            if(NULL != pListTail)
+                pListTail->pNext = NULL;
+
+            free(pList);
+            ERRLOG(" failed malloc pList: %s \n", strerror(errno));
+            break;
+        }
     }
 
     if(quitServices) 
         DBGLOG("Caught signal, exiting\n");
 
-    fclose(fOutput);
     if (0 !=  remove(OUTPUT_FILENAME))
         DBGLOG("Remove file %s failed.\n", OUTPUT_FILENAME);
 
-    close(sdListen);
+    
+    // Join all child threads.
+    struct listOfThread * pList = pListHead;
+    while(NULL != pList)
+    {
+        void * p; 
+        pthread_join(pList->thread, &p);
+
+        struct listOfThread * pTmp = pList; 
+        pList = pList->pNext;
+        free(pTmp);
+    }
+    
+successExit:
+    fclose(fOutput);
     freeaddrinfo(addInfo);
+    close(sdListen);
 #if !defined (LOGCONSOLE)
     closelog();
 #endif
+    return 0;
 
+
+// Error handling:
+//closefOutput:
+    fclose(fOutput);
+
+freeAddrinfo:
+    freeaddrinfo(addInfo);
+
+closeSDListen:
+    close(sdListen);
+
+closelog:
+#if !defined (LOGCONSOLE)
+    closelog();
+#endif
+    return -1;
 }
 
 
@@ -297,6 +375,86 @@ int strGetIP(const struct sockaddr *sa, char *s, size_t maxlen)
 
 void signalHandler(int signal)
 {
-    quitServices = true; 
+    if(SIGINT == signal || SIGTERM == signal )
+        quitServices = true; 
+
+    if(SIGALRM == signal)
+        isAlarmed = true;
 }
 
+
+void * threadHandler(void * alist)
+{
+    struct listOfThread * list = (struct listOfThread *) alist;
+    if(NULL == list)
+    {
+        ERRLOG("threadHandler: empty arguments\n");
+        return NULL;
+    }
+
+    // each thread open its own output file. 
+    FILE * fOutput = fopen(OUTPUT_FILENAME, "a+");
+    if(NULL == fOutput)
+    {
+        ERRLOG("fopen failed: %s \n", strerror(errno));
+        return NULL;
+    }
+
+
+    /// prepare a buffer for the transfer of the data
+    char buffer[SIZE_BUFFER];
+    memset(buffer, 0, SIZE_BUFFER);
+
+    // point to the end of the file to start:
+    fseek(fOutput, 0L, SEEK_END); 
+
+    time_t t = time(NULL);
+    pthread_mutex_lock(&(mutexFOutput));
+    // receive all packages/data
+    int iReceived = 0;
+    do
+    {
+        iReceived = recv(list->sdClient, buffer, SIZE_BUFFER, MSG_DONTWAIT);
+        if(0 < iReceived)
+        {
+            int iRet = fwrite(buffer, 1 , iReceived, fOutput);
+            DBGLOG("Data saved: %d vs received: %d, %d. \n", 
+                    iRet, iReceived, (int) buffer[iReceived - 1]);
+
+            // quit receving when a full packet is received.
+            if('\n' == buffer[iReceived - 1]) 
+            {
+                t = time(NULL);
+                DBGLOG("Full package: %d vs received: %d, %s. \n", 
+                    iRet, iReceived, ctime(&t));
+                break;
+            }
+        }
+
+    } while(((errno == EAGAIN || errno == EWOULDBLOCK) && iReceived <0) || (iReceived > 0));
+    pthread_mutex_unlock(&(mutexFOutput));
+
+
+    // really finsihed recving? 
+    t = time(NULL);
+    DBGLOG("Data saved other: %d , %s at %s  \n", iReceived, strerror(errno), ctime(&t));
+
+    // make sure all data saved to file.
+    fflush(fOutput);
+    rewind(fOutput);
+
+    iReceived = 0;
+    // send everything in the file to the client.
+    while(0 < (iReceived = fread(buffer, 1, SIZE_BUFFER, fOutput)))
+    {
+        buffer[iReceived] = '\0'; 
+        int iRet = send(list->sdClient, buffer, iReceived, 0);
+        DBGLOG("Data send: %d vs read: %d, %s \n", iRet, iReceived, buffer);
+    }
+    
+    DBGLOG("Closed connection from %s\n", list->strIP);
+    close(list->sdClient);
+    fclose(fOutput);
+
+    return NULL;
+}
