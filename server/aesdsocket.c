@@ -46,6 +46,8 @@ struct listOfThread
 
     struct listOfThread * pNext;
     struct listOfThread * pPrevious;
+
+    bool isComplete; 
 };
 
 // static items 
@@ -250,6 +252,33 @@ int main(int argc, char * argv[])
                 DBGLOG("Incorrect NULL locatime: %s \n", strerror(errno));
         }
 
+ 
+        // Join all complete child threads.
+        struct listOfThread * pList = pListHead;
+        while(NULL != pList)
+        {
+            struct listOfThread * pTmp = pList; 
+            pList = pList->pNext;
+
+            if(pTmp -> isComplete)
+            {
+                if(NULL != pTmp->pPrevious)
+                    pTmp->pPrevious->pNext = pTmp->pNext; 
+                if(NULL != pTmp->pNext)
+                    pTmp->pNext->pPrevious = pTmp->pPrevious;
+                if(pListHead == pTmp)
+                    pListHead = pTmp->pNext;
+                if(pListTail == pTmp)
+                    pListTail = pTmp->pPrevious;
+                
+                void * p; 
+                pthread_join(pTmp->thread, &p);
+                free(pTmp);
+            }
+        }
+        
+
+        //  
         int sdClient = accept(sdListen, &clientAddr, &clientAddrLen);
         if(-1 == sdClient)
         {
@@ -260,7 +289,7 @@ int main(int argc, char * argv[])
             break;
         }
         
-        struct listOfThread * pList = malloc(sizeof(struct listOfThread));
+        pList = malloc(sizeof(struct listOfThread));
         if(NULL == pList)
         {
             // running out of memory?
@@ -277,6 +306,7 @@ int main(int argc, char * argv[])
 
         pList->pNext = NULL;
         pList->pPrevious = NULL;
+        pList->isComplete = false;
         pList->sdClient = sdClient;
 
         if(NULL == pListHead)
@@ -323,7 +353,8 @@ int main(int argc, char * argv[])
         free(pTmp);
     }
     
-    fclose(fOutput);
+    if(NULL != fOutput)
+        fclose(fOutput);
 
 successExit:
     freeaddrinfo(addInfo);
@@ -398,6 +429,7 @@ void * threadHandler(void * alist)
     if(NULL == fOutput)
     {
         ERRLOG("fopen failed: %s \n", strerror(errno));
+        list->isComplete = true;
         return NULL;
     }
 
@@ -456,6 +488,7 @@ void * threadHandler(void * alist)
     DBGLOG("Closed connection from %s\n", list->strIP);
     close(list->sdClient);
     fclose(fOutput);
+    list->isComplete = true;
 
     return NULL;
 }
