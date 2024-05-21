@@ -24,7 +24,7 @@ start() {
 	#start-stop-daemon -b -m -S -q -p "$PIDFILE" -x "/sbin/$DAEMON" \
 	#	-- -n $KLOGD_ARGS
 	
-	start-stop-daemon --start --quiet --pidfile "$PIDFILE" -x "/bin/$DAEMON"  -- $AESD_ARGS
+	start-stop-daemon --start --quiet --pidfile "$PIDFILE" -x "$LOCDAEMON"  -- $AESD_ARGS
 	status=$?
 	if [ "$status" -eq 0 ]; then
 		echo "OK"
