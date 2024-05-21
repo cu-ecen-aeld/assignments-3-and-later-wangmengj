@@ -8,6 +8,14 @@ AESD_ARGS="-d"
 # shellcheck source=/dev/null
 [ -r "/etc/default/$DAEMON" ] && . "/etc/default/$DAEMON"
 
+if [ -f "/bin/$DAEMON" ] ; then
+LOCDAEMON="/bin/${DAEMON}"
+fi
+
+if [ -f "/usr/bin/$DAEMON" ] ; then
+LOCDAEMON="/usr/bin/${DAEMON}"
+fi
+
 # BusyBox' klogd does not create a pidfile, so pass "-n" in the command line
 # and use "-m" to instruct start-stop-daemon to create one.
 start() {
