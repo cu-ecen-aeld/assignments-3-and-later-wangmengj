@@ -16,6 +16,8 @@
 
 #include "aesd-circular-buffer.h"
 
+//dbg
+//#include<stdio.h>
 /**
  * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
  * @param char_offset the position to search for in the buffer list, describing the zero referenced
@@ -32,6 +34,26 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     /**
     * TODO: implement per description
     */
+    
+    if(NULL == buffer || NULL == entry_offset_byte_rtn)
+        return NULL;
+
+    // dbg
+    //printf("looking for: offset %d \n", (int)char_offset);
+
+    int currentOffset = 0;
+    for(int i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; ++i)
+    {
+        if(char_offset >= currentOffset && char_offset < currentOffset + buffer->entry[i].size) 
+        {
+            //printf("found for: item no. %d, %s \n", i, buffer->entry[i].buffptr);
+            *entry_offset_byte_rtn  = char_offset - currentOffset;
+            return &(buffer->entry[i]);
+        }
+
+        currentOffset+= buffer->entry[i].size;
+    }
+
     return NULL;
 }
 
@@ -47,8 +69,31 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     /**
     * TODO: implement per description
     */
+
+    if(NULL == buffer || NULL == add_entry)
+        return;
+
+    // if it is already full, make a space first.
+    if(buffer->in_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) 
+    {
+        buffer->full = true;
+
+        for(int i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1; ++i)
+            buffer->entry[i] = buffer->entry[i+1];
+
+        buffer->in_offs = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1;
+    }
+
+    buffer->entry[buffer->in_offs].buffptr = add_entry->buffptr;
+    buffer->entry[buffer->in_offs].size = add_entry->size;
+    buffer->in_offs++;
+
+    //printf("adding: %s, size:%d , buffer->in_offs = %d \n", 
+    //    add_entry->buffptr, (int)add_entry->size, (int)buffer->in_offs );
 }
 
+
+    
 /**
 * Initializes the circular buffer described by @param buffer to an empty struct
 */
