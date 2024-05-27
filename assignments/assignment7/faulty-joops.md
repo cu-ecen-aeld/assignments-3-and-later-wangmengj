@@ -47,4 +47,4 @@ ssize_t faulty_write (struct file *filp, const char __user *buf, size_t count,
 
 Here is the picture of the Oops message:
 
-![Screenshot of the Oops message we analyzed in this article.](https://github.com/cu-ecen-aeld/assignment-7-wangmengj.git/assignments/assignment7/assets/images/oops.jpeg)
+![Screenshot of the Oops message we analyzed in this article.](/assignments/assignment7/assets/images/oops.jpeg)
