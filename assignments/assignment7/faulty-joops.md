@@ -15,7 +15,7 @@ This is an identification of an oops problem.
 2. After an oops identification, we need to know the exactly problem of this problem which is on the first line of the message:
 ```
 Unable to handle kernel NULL pointer deference at virtual address 0000000000000000.
-
+```
 This showed that a NULL was accessed.
 
 3. In the next we need to find out the detail of code that created the problem, around the middle of the message:
@@ -47,4 +47,4 @@ ssize_t faulty_write (struct file *filp, const char __user *buf, size_t count,
 
 Here is the picture of the Oops message:
 
-![Screenshot of the Oops message we analyzed in this article.](/assignments/assignment7/assets/images/oops.jpeg)
+![Screenshot of the Oops message we analyzed in this article.](/assignments/assignment7/assets/images/oops.jpeg?raw=true)
