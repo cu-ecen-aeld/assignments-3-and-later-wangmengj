@@ -442,6 +442,18 @@ void * threadHandler(void * alist)
     }
 
     FILE * fOutput = NULL;
+    // delayed openning this file
+    if(NULL == fOutput)
+    {
+        // each thread open its own output file. 
+        fOutput = fopen(OUTPUT_FILENAME, "a+");
+        if(NULL == fOutput)
+        {
+            ERRLOG("fopen failed: %s \n", strerror(errno));
+            list->isComplete = true;
+            return NULL;
+        }
+    }
 
     /// prepare a buffer for the transfer of the data
     char buffer[SIZE_BUFFER];
@@ -459,20 +471,7 @@ void * threadHandler(void * alist)
         iReceived = recv(list->sdClient, buffer, SIZE_BUFFER, MSG_DONTWAIT);
         if(0 < iReceived)
         {
-            // delayed openning this file
-            if(NULL == fOutput)
-            {
-                // each thread open its own output file. 
-                fOutput = fopen(OUTPUT_FILENAME, "a+");
-                if(NULL == fOutput)
-                {
-                    ERRLOG("fopen failed: %s \n", strerror(errno));
-                    list->isComplete = true;
-                    return NULL;
-                }
-            }
-
-            int iRet = fwrite(buffer, 1 , iReceived, fOutput);
+           int iRet = fwrite(buffer, 1 , iReceived, fOutput);
             DBGLOG("Data saved: %d vs received: %d, %d. \n", 
                     iRet, iReceived, (int) buffer[iReceived - 1]);
 
@@ -493,19 +492,6 @@ void * threadHandler(void * alist)
     // really finsihed recving? 
     t = time(NULL);
     DBGLOG("Data saved other: %d , %s at %s  \n", iReceived, strerror(errno), ctime(&t));
-
-    // delayed openning this file
-    if(NULL == fOutput)
-    {
-        // each thread open its own output file. 
-        fOutput = fopen(OUTPUT_FILENAME, "a+");
-        if(NULL == fOutput)
-        {
-            ERRLOG("fopen failed: %s \n", strerror(errno));
-            list->isComplete = true;
-            return NULL;
-        }
-    }
 
     // make sure all data saved to file.
     fflush(fOutput);
