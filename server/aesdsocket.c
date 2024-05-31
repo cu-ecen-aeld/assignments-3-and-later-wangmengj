@@ -23,7 +23,14 @@
 #define STR_PORT "9000"
 // ipv6 takes 39 characters
 #define IP_LENTH 39
+
+#define USE_AESD_CHAR_DEVICE 1
+#ifdef USE_AESD_CHAR_DEVICE
+#define OUTPUT_FILENAME "/dev/aesdchar"
+#else
 #define OUTPUT_FILENAME "/var/tmp/aesdsocketdata"
+#endif
+
 #define PID_FILE "/var/run/aesdsocket.pid"
 
 #define LOGCONSOLE 
@@ -337,9 +344,10 @@ int main(int argc, char * argv[])
     if(quitServices) 
         DBGLOG("Caught signal, exiting\n");
 
+#ifndef USE_AESD_CHAR_DEVICE
     if (0 !=  remove(OUTPUT_FILENAME))
         DBGLOG("Remove file %s failed.\n", OUTPUT_FILENAME);
-
+#endif
     
     // Join all child threads.
     struct listOfThread * pList = pListHead;

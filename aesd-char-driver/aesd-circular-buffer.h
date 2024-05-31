@@ -49,6 +49,7 @@ struct aesd_circular_buffer
      * set to true when the buffer entry structure is full
      */
     bool full;
+
 };
 
 extern struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
@@ -57,6 +58,12 @@ extern struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos
 extern void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry);
 
 extern void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer);
+
+// Take out the first item from the buffer and call handler on it.
+extern void aesd_circular_buffer_remove_entry(
+    struct aesd_circular_buffer *buffer,
+    struct aesd_buffer_entry *entry);
+    
 
 /**
  * Create a for loop to iterate over each member of the circular buffer.
@@ -72,9 +79,15 @@ extern void aesd_circular_buffer_init(struct aesd_circular_buffer *buffer);
  *      free(entry->buffptr);
  * }
  */
+
 #define AESD_CIRCULAR_BUFFER_FOREACH(entryptr,buffer,index) \
     for(index=0, entryptr=&((buffer)->entry[index]); \
             index<AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; \
+            index++, entryptr=&((buffer)->entry[index]))
+
+#define AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,buffer,index) \
+    for(index=((buffer)->out_offs), entryptr=&((buffer)->entry[index]); \
+            index<((buffer)->in_offs) ; \
             index++, entryptr=&((buffer)->entry[index]))
 
 
