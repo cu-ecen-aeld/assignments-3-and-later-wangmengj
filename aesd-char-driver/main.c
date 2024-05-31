@@ -236,7 +236,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         PDEBUG("write allocate total size: %d\n", iTotalSize);
         entryToCircularBuffer.buffptr = kmalloc(iTotalSize + 1, GFP_KERNEL);
         pchar[iTotalSize] = '\0';
-        retval = entryToCircularBuffer.size = iTotalSize;
+        entryToCircularBuffer.size = iTotalSize;
 
         if(NULL == entryToCircularBuffer.buffptr)
         {
