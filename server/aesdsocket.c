@@ -31,9 +31,12 @@
 #define OUTPUT_FILENAME "/var/tmp/aesdsocketdata"
 #endif
 
+// mask off this to remove Alarm related function.
+//#define USE_ALARM
+
 #define PID_FILE "/var/run/aesdsocket.pid"
 
-#define LOGCONSOLE 
+//#define LOGCONSOLE 
 
 #if defined (LOGCONSOLE)
 #define DBGLOG(...) printf (__VA_ARGS__)
@@ -69,7 +72,10 @@ int strGetIP(const struct sockaddr *sa, char *s, size_t maxlen);
 void signalHandler(int signal);
 
 bool quitServices = false;
+
+#ifdef USE_ALARM
 bool isAlarmed = false;
+#endif // USE_ALARM
 
 int main(int argc, char * argv[])
 {
@@ -97,11 +103,13 @@ int main(int argc, char * argv[])
         goto closelog;
     }
 
+#ifdef USE_ALARM
     if(SIG_ERR == signal(SIGALRM, signalHandler))
     {
         ERRLOG("Register SIGALRM failed: %s \n", strerror(errno));
         goto closelog;
     }
+#endif // USE_ALARM
     
     int sdListen = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if(-1 == sdListen)
@@ -203,6 +211,7 @@ int main(int argc, char * argv[])
         goto freeAddrinfo;
     }
 
+    DBGLOG("fopening file: %s \n", OUTPUT_FILENAME);
     FILE * fOutput = fopen(OUTPUT_FILENAME, "a+");
     if(NULL == fOutput)
     {
@@ -210,6 +219,7 @@ int main(int argc, char * argv[])
         goto freeAddrinfo;
     }
 
+#ifdef USE_ALARM
     // setup a timer for every 10s 
     struct itimerval newValue;
     newValue.it_interval.tv_sec = 10; // every 10 seconds
@@ -219,6 +229,7 @@ int main(int argc, char * argv[])
     {
         DBGLOG("setitimer failed: %s \n", strerror(errno));
     }
+#endif // USE_ALARM
     
     time_t t = time(NULL);
     // start services:
@@ -228,6 +239,7 @@ int main(int argc, char * argv[])
         socklen_t clientAddrLen = sizeof(clientAddr) ; 
         memset(&clientAddr, 0, sizeof(clientAddr));
 
+#ifdef USE_ALARM
         if(isAlarmed)
         {
             isAlarmed = false;
@@ -258,7 +270,7 @@ int main(int argc, char * argv[])
             else 
                 DBGLOG("Incorrect NULL locatime: %s \n", strerror(errno));
         }
-
+#endif 
  
         // Join all complete child threads.
         struct listOfThread * pList = pListHead;
@@ -296,6 +308,8 @@ int main(int argc, char * argv[])
             break;
         }
         
+        DBGLOG("accepted 1 connection \n");
+
         pList = malloc(sizeof(struct listOfThread));
         if(NULL == pList)
         {
@@ -418,8 +432,10 @@ void signalHandler(int signal)
     if(SIGINT == signal || SIGTERM == signal )
         quitServices = true; 
 
+#ifdef USE_ALARM
     if(SIGALRM == signal)
         isAlarmed = true;
+#endif // USE_ALARM
 }
 
 

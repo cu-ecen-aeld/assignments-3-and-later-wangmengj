@@ -37,6 +37,14 @@ static struct rw_semaphore incompleteWriteBufferLock;
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
+    if(NULL == inode || NULL == filp)
+    {
+        PDEBUG("aesd_open empty pointers.");
+        return 0;
+    }
+     
+    filp->private_data = container_of(inode->i_cdev, struct aesd_dev, cdev);
+
     PDEBUG("open");
     /**
      * TODO: handle open
@@ -173,6 +181,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     entryToIncompleteWrite.buffptr = kmalloc(count + 1, GFP_KERNEL);
     char * pchar = (char*)entryToIncompleteWrite.buffptr;
     pchar[count] = '\0';
+    ssize_t retval = count;
 
     entryToIncompleteWrite.size = count;
     entryToCircularBuffer.buffptr = NULL;
@@ -194,13 +203,12 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     }
      
     PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
-    ssize_t retval = 0;
 
     down_write(&incompleteWriteBufferLock);
     
     // if incomplete buffer is full, free the first item.
     if(incompleteWriteBuffer.full)
-    { /// --------------
+    { 
         struct aesd_buffer_entry aEntry; 
         aesd_circular_buffer_remove_entry(&incompleteWriteBuffer, &aEntry);
         kfree(aEntry.buffptr);
@@ -214,7 +222,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     // incomplete buffer to the circularBuffer
     if('\n' == entryToIncompleteWrite.buffptr[count-1])
     {
-
         PDEBUG("write there is a line return char\n");
 
         // we need to make a buffer big enough for everything in the incomplete buffer 
