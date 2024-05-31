@@ -377,9 +377,10 @@ int main(int argc, char * argv[])
     }
    
 
+    fclose(fOutput);
+
 successExit:
     iReturnValue = 0;
-    fclose(fOutput);
 
 freeAddrinfo:
     freeaddrinfo(addInfo);
