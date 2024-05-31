@@ -212,6 +212,7 @@ int main(int argc, char * argv[])
         goto freeAddrinfo;
     }
 
+#ifdef USE_ALARM
     DBGLOG("fopening file: %s \n", OUTPUT_FILENAME);
     FILE * fOutput = fopen(OUTPUT_FILENAME, "a+");
     if(NULL == fOutput)
@@ -220,7 +221,6 @@ int main(int argc, char * argv[])
         goto freeAddrinfo;
     }
 
-#ifdef USE_ALARM
     // setup a timer for every 10s 
     struct itimerval newValue;
     newValue.it_interval.tv_sec = 10; // every 10 seconds
@@ -377,7 +377,9 @@ int main(int argc, char * argv[])
     }
    
 
+#ifdef USE_ALARM
     fclose(fOutput);
+#endif // USE_ALARM
 
 successExit:
     iReturnValue = 0;
@@ -439,15 +441,7 @@ void * threadHandler(void * alist)
         return NULL;
     }
 
-    // each thread open its own output file. 
-    FILE * fOutput = fopen(OUTPUT_FILENAME, "a+");
-    if(NULL == fOutput)
-    {
-        ERRLOG("fopen failed: %s \n", strerror(errno));
-        list->isComplete = true;
-        return NULL;
-    }
-
+    FILE * fOutput = NULL;
 
     /// prepare a buffer for the transfer of the data
     char buffer[SIZE_BUFFER];
@@ -465,6 +459,19 @@ void * threadHandler(void * alist)
         iReceived = recv(list->sdClient, buffer, SIZE_BUFFER, MSG_DONTWAIT);
         if(0 < iReceived)
         {
+            // delayed openning this file
+            if(NULL == fOutput)
+            {
+                // each thread open its own output file. 
+                fOutput = fopen(OUTPUT_FILENAME, "a+");
+                if(NULL == fOutput)
+                {
+                    ERRLOG("fopen failed: %s \n", strerror(errno));
+                    list->isComplete = true;
+                    return NULL;
+                }
+            }
+
             int iRet = fwrite(buffer, 1 , iReceived, fOutput);
             DBGLOG("Data saved: %d vs received: %d, %d. \n", 
                     iRet, iReceived, (int) buffer[iReceived - 1]);
@@ -486,6 +493,19 @@ void * threadHandler(void * alist)
     // really finsihed recving? 
     t = time(NULL);
     DBGLOG("Data saved other: %d , %s at %s  \n", iReceived, strerror(errno), ctime(&t));
+
+    // delayed openning this file
+    if(NULL == fOutput)
+    {
+        // each thread open its own output file. 
+        fOutput = fopen(OUTPUT_FILENAME, "a+");
+        if(NULL == fOutput)
+        {
+            ERRLOG("fopen failed: %s \n", strerror(errno));
+            list->isComplete = true;
+            return NULL;
+        }
+    }
 
     // make sure all data saved to file.
     fflush(fOutput);
