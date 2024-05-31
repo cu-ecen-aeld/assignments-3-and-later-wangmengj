@@ -79,6 +79,7 @@ bool isAlarmed = false;
 
 int main(int argc, char * argv[])
 {
+    int iReturnValue = -1; // default is failure
 
 #if !defined (LOGCONSOLE)
     openlog(NULL, LOG_PID, LOG_USER);
@@ -374,21 +375,10 @@ int main(int argc, char * argv[])
         pList = pList->pNext;
         free(pTmp);
     }
-    
-    if(NULL != fOutput)
-        fclose(fOutput);
+   
 
 successExit:
-    freeaddrinfo(addInfo);
-    close(sdListen);
-#if !defined (LOGCONSOLE)
-    closelog();
-#endif
-    return 0;
-
-
-// Error handling:
-//closefOutput:
+    iReturnValue = 0;
     fclose(fOutput);
 
 freeAddrinfo:
@@ -401,7 +391,7 @@ closelog:
 #if !defined (LOGCONSOLE)
     closelog();
 #endif
-    return -1;
+    return iReturnValue;
 }
 
 
