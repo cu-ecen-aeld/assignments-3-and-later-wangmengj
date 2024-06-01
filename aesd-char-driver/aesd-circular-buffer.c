@@ -71,7 +71,7 @@ void aesd_circular_buffer_remove_entry(struct aesd_circular_buffer *buffer, stru
     entry->size = buffer->entry[0].size;
 
     int i;
-    for( i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1; ++i)
+    for( i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 2; ++i)
         buffer->entry[i] = buffer->entry[i+1];
 
     buffer->in_offs--; 
@@ -97,7 +97,7 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
         buffer->full = true;
 
         int i;
-        for(i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1; ++i)
+        for(i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 2; ++i)
             buffer->entry[i] = buffer->entry[i+1];
 
         buffer->in_offs = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1;
