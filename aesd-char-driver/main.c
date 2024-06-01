@@ -281,6 +281,15 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     if(NULL != entryToCircularBuffer.buffptr)
     {
         down_write(&circularBufferLock);  
+
+        // if the circular buffer is full, we remove the first item.
+        if(circularBuffer.full)
+        {
+            struct aesd_buffer_entry aEntry; 
+            aesd_circular_buffer_remove_entry(&circularBuffer, &aEntry);
+            aesd_free(aEntry.buffptr);
+        }
+
         aesd_circular_buffer_add_entry(&circularBuffer, &entryToCircularBuffer);
         up_write(&circularBufferLock);
     }
