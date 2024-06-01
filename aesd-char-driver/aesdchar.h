@@ -16,6 +16,7 @@
      /* This one if debugging is on, and kernel space */
 #    define PDEBUG(fmt, args...) printk( KERN_DEBUG "aesdchar: " fmt, ## args)
 #  else
+#include<stdio.h>
      /* This one for user space */
 #    define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
 #  endif
@@ -23,6 +24,7 @@
 #  define PDEBUG(fmt, args...) /* not debugging: nothing */
 #endif
 
+#  ifdef __KERNEL__
 struct aesd_dev
 {
     /**
@@ -30,6 +32,7 @@ struct aesd_dev
      */
     struct cdev cdev;     /* Char device structure      */
 };
+#endif // __KERNEL__
 
 
 #endif /* AESD_CHAR_DRIVER_AESDCHAR_H_ */
