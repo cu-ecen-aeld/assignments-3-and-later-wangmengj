@@ -71,7 +71,7 @@ void aesd_circular_buffer_remove_entry(struct aesd_circular_buffer *buffer, stru
     entry->size = buffer->entry[0].size;
 
     int i;
-    for( i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 2; ++i)
+    for( i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1; ++i)
         buffer->entry[i] = buffer->entry[i+1];
 
     buffer->in_offs--; 
@@ -94,10 +94,10 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     // if it is already full, make a space first.
     if(buffer->in_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) 
     {
-        buffer->full = true;
+        buffer->full = false;
 
         int i;
-        for(i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 2; ++i)
+        for(i = 0 ; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1; ++i)
             buffer->entry[i] = buffer->entry[i+1];
 
         buffer->in_offs = AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED - 1;
@@ -106,6 +106,9 @@ void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const s
     buffer->entry[buffer->in_offs].buffptr = add_entry->buffptr;
     buffer->entry[buffer->in_offs].size = add_entry->size;
     buffer->in_offs++;
+
+    if(buffer->in_offs == AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED) 
+        buffer->full = true;
 
     PDEBUG("adding: %s, size:%d , buffer->in_offs = %d \n", 
         add_entry->buffptr, (int)add_entry->size, (int)buffer->in_offs );
