@@ -171,6 +171,19 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     return accumlatedCopied;
 }
 
+void * aesd_malloc(size_t count)
+{
+    void * vp = kmalloc(count, GFP_KERNEL);
+    PDEBUG("aesd memory log kmalloc %ld -- %p .",(unsigned long)count, vp);
+    return vp;
+}
+
+void aesd_free(void * vp)
+{
+    PDEBUG("aesd memory log kfree %p .", vp);
+    kfree(vp);
+}
+
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
@@ -178,7 +191,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     struct aesd_buffer_entry entryToCircularBuffer; 
 
     // adding 1 extra for '\0' char for debug purpose.
-    entryToIncompleteWrite.buffptr = kmalloc(count + 1, GFP_KERNEL);
+    entryToIncompleteWrite.buffptr = aesd_malloc(count + 1 );
     char * pchar = (char*)entryToIncompleteWrite.buffptr;
     pchar[count] = '\0';
     ssize_t retval = count;
@@ -198,7 +211,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     if(0 != result)
     {
         PDEBUG("write: copy_from_user returned %ld, need to copy %ld", result, (unsigned long)count);
-        kfree(entryToIncompleteWrite.buffptr);
+        aesd_free(entryToIncompleteWrite.buffptr);
         return -ENOMEM;
     }
      
@@ -211,7 +224,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     { 
         struct aesd_buffer_entry aEntry; 
         aesd_circular_buffer_remove_entry(&incompleteWriteBuffer, &aEntry);
-        kfree(aEntry.buffptr);
+        aesd_free(aEntry.buffptr);
     }
 
     PDEBUG("write to incompleteWriteBuffer first \n");
@@ -234,7 +247,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             iTotalSize += entryptr->size;
 
         PDEBUG("write allocate total size: %d\n", iTotalSize);
-        entryToCircularBuffer.buffptr = kmalloc(iTotalSize + 1, GFP_KERNEL);
+        entryToCircularBuffer.buffptr = aesd_malloc(iTotalSize + 1);
         pchar[iTotalSize] = '\0';
         entryToCircularBuffer.size = iTotalSize;
 
@@ -254,7 +267,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             i += entryptr->size;
 
             // free each buffptr
-            kfree(entryptr->buffptr);
+            aesd_free(entryptr->buffptr);
             entryptr->buffptr=NULL;
             entryptr->size=0;
         }
@@ -354,7 +367,7 @@ void aesd_cleanup_module(void)
     AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,&incompleteWriteBuffer,index)
     {
         // free each buffptr
-        kfree(entryptr->buffptr);
+        aesd_free(entryptr->buffptr);
         entryptr->buffptr=NULL;
         entryptr->size=0;
     }
@@ -362,7 +375,7 @@ void aesd_cleanup_module(void)
     AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,&circularBuffer,index)
     {
         // free each buffptr
-        kfree(entryptr->buffptr);
+        aesd_free(entryptr->buffptr);
         entryptr->buffptr=NULL;
         entryptr->size=0;
     }
