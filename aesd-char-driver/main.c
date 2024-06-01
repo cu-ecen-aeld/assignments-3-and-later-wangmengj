@@ -381,9 +381,10 @@ void aesd_cleanup_module(void)
         entryptr->size=0;
     }
 
-    PDEBUG("cleanup circularBuffer from %ld to %ld \n", 
+    PDEBUG("cleanup circularBuffer from %d to %d \n", 
         circularBuffer.out_offs ,circularBuffer.in_offs);
 
+/*
     AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,&circularBuffer,index)
     {
         PDEBUG("cleanup circularBuffer index = %d \n", index);
@@ -391,7 +392,21 @@ void aesd_cleanup_module(void)
         aesd_free(entryptr->buffptr, "loc 8");
         entryptr->buffptr=NULL;
         entryptr->size=0;
+        PDEBUG("cleanup after circularBuffer index = %d \n", index);
     }
+*/
+    for(index=(circularBuffer.out_offs); index<(circularBuffer.in_offs); index++)
+    {
+        entryptr=&(circularBuffer.entry[index]);
+
+        PDEBUG("cleanup circularBuffer index = %d \n", index);
+        // free each buffptr
+        aesd_free((void*)entryptr->buffptr, "loc 8");
+        entryptr->buffptr=NULL;
+        entryptr->size=0;
+        PDEBUG("cleanup after circularBuffer index = %d \n", index);
+    }
+
  
 }
 
