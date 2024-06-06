@@ -20,6 +20,7 @@
 #include <linux/slab.h>
 #include "aesdchar.h"
 #include "aesd-circular-buffer.h"
+#include "aesd_ioctl.h"
 
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
@@ -71,8 +72,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
         return 0; 
     }
 
-    ssize_t retval = 0;
-    PDEBUG("aesd_read %zu bytes with offset %lld",count,*f_pos);
+    //ssize_t retval = 0;
+    PDEBUG("aesd_read %zu bytes with offset %lld, while reading offset %lld,"
+        ,count,*f_pos, filp->f_pos);
 
 
     // read the item in the circular buffer out.     
@@ -90,9 +92,9 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
         if (count <= 0) 
             break;
 
-        PDEBUG("aesd_read current index = %d, circularBuffer.out_offs = %d, circularBuffer.in_offs = %d \n",
-            index, circularBuffer.out_offs, circularBuffer.in_offs);
-        PDEBUG("aesd_read *f_pos:%ld, entryOffset:%ld, size:%ld ", *f_pos, entryOffset, entryptr->size); 
+        //PDEBUG("aesd_read current index = %d, circularBuffer.out_offs = %d, circularBuffer.in_offs = %d \n",
+        //    index, circularBuffer.out_offs, circularBuffer.in_offs);
+        //PDEBUG("aesd_read *f_pos:%lld, entryOffset:%ld, size:%ld ", *f_pos, entryOffset, entryptr->size); 
 
         // if f_pos in part of an item.
         if(*f_pos >= entryOffset && *f_pos < entryOffset + entryptr->size)
@@ -147,24 +149,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
         entryOffset += entryptr->size;
     }
 
-   /* 
-    struct aesd_buffer_entry * pEntry = 
-        aesd_circular_buffer_find_entry_offset_for_fpos(
-            &circularBuffer, *f_pos, &entryOffset);
-
-    if(NULL != pEntry)
-    {
-        size_t countToCopy = pEntry->size - entryOffset ;
-        if(countToCopy > count)
-            countToCopy = count;
-        unsigned long result = copy_to_user(buf, pEntry->buffptr + entryOffset, countToCopy);
-        if(0 != result)
-           PDEBUG("aesd_read copy_to_user result:%ld ", result); 
-
-        PDEBUG("aesd_read offset %lld, returned: %s : %ld",*f_pos, pEntry->buffptr + entryOffset, (unsigned long)countToCopy);
-    }
-    */
-
     up_read(&circularBufferLock);
 
     *f_pos += accumlatedCopied;
@@ -174,13 +158,13 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 void * aesd_malloc(size_t count, char * log)
 {
     void * vp = kmalloc(count, GFP_KERNEL);
-    PDEBUG("aesd memory log kmalloc %ld -- %p at %s.\n",(unsigned long)count, vp, log);
+    //PDEBUG("aesd memory log kmalloc %ld -- %p at %s.\n",(unsigned long)count, vp, log);
     return vp;
 }
 
 void aesd_free(void * vp, char * log)
 {
-    PDEBUG("aesd memory log kfree %p at %s .", vp, log);
+    //PDEBUG("aesd memory log kfree %p at %s .", vp, log);
     kfree(vp);
 }
 
@@ -211,7 +195,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     if(0 != result)
     {
         PDEBUG("write: copy_from_user returned %ld, need to copy %ld", result, (unsigned long)count);
-        aesd_free(entryToIncompleteWrite.buffptr, "loc 2");
+        aesd_free((void*) entryToIncompleteWrite.buffptr, "loc 2");
         return -ENOMEM;
     }
      
@@ -224,7 +208,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     { 
         struct aesd_buffer_entry aEntry; 
         aesd_circular_buffer_remove_entry(&incompleteWriteBuffer, &aEntry);
-        aesd_free(aEntry.buffptr, "loc 3");
+        aesd_free((void*) aEntry.buffptr, "loc 3");
     }
 
     PDEBUG("write to incompleteWriteBuffer first \n");
@@ -267,7 +251,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
             i += entryptr->size;
 
             // free each buffptr
-            aesd_free(entryptr->buffptr, "loc 5");
+            aesd_free((void*) entryptr->buffptr, "loc 5");
             entryptr->buffptr=NULL;
             entryptr->size=0;
         }
@@ -287,17 +271,111 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
         {
             struct aesd_buffer_entry aEntry; 
             aesd_circular_buffer_remove_entry(&circularBuffer, &aEntry);
-            aesd_free(aEntry.buffptr, "loc 6");
+            aesd_free((void*) aEntry.buffptr, "loc 6");
         }
 
         aesd_circular_buffer_add_entry(&circularBuffer, &entryToCircularBuffer);
         up_write(&circularBufferLock);
     }
 
-    /**
-     * TODO: handle write
-     */
+    *f_pos += retval;
     return retval;
+}
+
+loff_t aesd_llseek(struct file * pfile, loff_t offset, int whence)
+{
+    int iTotalSize = 0;
+    int index;
+    struct aesd_buffer_entry * entryptr;
+/*
+    down_read(&incompleteWriteBufferLock);
+    AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,&incompleteWriteBuffer,index)
+        iTotalSize+=entryptr->size;
+    up_read(&incompleteWriteBufferLock);
+*/
+
+    down_read(&circularBufferLock);
+    AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,&circularBuffer,index)
+        iTotalSize+=entryptr->size;
+    up_read(&circularBufferLock);
+
+    loff_t toReturn = fixed_size_llseek(pfile, offset, whence, iTotalSize);
+    PDEBUG("aesd llseek log: total size:%d, offset:%ld (filp:%ld)return: %ld .\n",
+        iTotalSize, offset, pfile->f_pos, toReturn);
+    return toReturn;
+}
+
+/*
+    Adjust the file offset (f_pos) parameter of @param filp based on the location specified by
+    @parameter write_cmd (the zero referenced command to locate)
+    @return 0 if successful, negative if error occurred:
+        -ERESTARTSYS if mutex could not be obtained, 
+        -EINVAL if write command or write_cmd_offset was out of range
+*/
+long aesd_adjust_file_offset(
+    struct file * pfile, unsigned int write_cmd, unsigned int write_cmd_offset)
+{
+    // find out the total size;
+    int iTotalSize = 0;
+    int iSizeCurrentCMD = 0;
+
+    int index;
+    struct aesd_buffer_entry * entryptr;
+
+
+    PDEBUG("aesd adjust_file_offset recevied: write_cmd:%ld, offset:%ld .\n",
+        write_cmd, write_cmd_offset);
+
+    down_read(&circularBufferLock);
+    if(write_cmd >= circularBuffer.in_offs)
+    {
+        size_t i = circularBuffer.in_offs;
+        up_read(&circularBufferLock);
+        PDEBUG("aesd adjust_file_offset failed: write_cmd:%ld (too big), offset:%ld .\n",
+            write_cmd, i);
+        return -EINVAL;
+    }
+
+    AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,&circularBuffer,index)
+    {
+        // save the size of current cmd
+        iSizeCurrentCMD = entryptr->size;
+
+        // find the right cmd by index
+        if(index == write_cmd)
+            break;
+
+        iTotalSize+=entryptr->size;
+    }
+    up_read(&circularBufferLock);
+
+    if(write_cmd_offset >= iSizeCurrentCMD)
+    {
+        PDEBUG("aesd adjust_file_offset failed: write_cmd_offset:%ld (too big), iSizeCurrentCMD:%ld .\n",
+            write_cmd_offset, iSizeCurrentCMD);
+        return -EINVAL;
+    }
+
+    PDEBUG("aesd adjust_file_offset new position: %ld .\n", iTotalSize + write_cmd_offset);
+    pfile->f_pos = iTotalSize + write_cmd_offset;
+    return 0;
+}
+
+long aesd_ioctl(struct file * pfile, unsigned int uiCmd, unsigned long ulArg)
+{
+    struct aesd_seekto seekCmd; 
+
+    if(uiCmd == AESDCHAR_IOCSEEKTO)
+    {
+        if (copy_from_user(&seekCmd, (struct aesd_seekto __user *)ulArg, sizeof(seekCmd)))
+            return -EFAULT;
+
+        PDEBUG("aesd ioctl seek cmd recevied: write_cmd:%ld, offset:%ld .\n",
+            seekCmd.write_cmd, seekCmd.write_cmd_offset);
+        return aesd_adjust_file_offset(pfile, seekCmd.write_cmd, seekCmd.write_cmd_offset);
+    }
+
+    return -ENOTTY;
 }
 
 struct file_operations aesd_fops = {
@@ -306,6 +384,8 @@ struct file_operations aesd_fops = {
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek =   aesd_llseek, 
+    .unlocked_ioctl = aesd_ioctl, 
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)
@@ -376,7 +456,7 @@ void aesd_cleanup_module(void)
     AESD_CIRCULAR_BUFFER_FOREACH_A(entryptr,&incompleteWriteBuffer,index)
     {
         // free each buffptr
-        aesd_free(entryptr->buffptr, "loc 7");
+        aesd_free((void*) entryptr->buffptr, "loc 7");
         entryptr->buffptr=NULL;
         entryptr->size=0;
     }
@@ -392,7 +472,7 @@ void aesd_cleanup_module(void)
 //            PDEBUG("cleanup WHAT circularBuffer index = %d \n", index);
 
         // free each buffptr
-        aesd_free(entryptr->buffptr, "loc 8");
+        aesd_free((void*) entryptr->buffptr, "loc 8");
         entryptr->buffptr=NULL;
         entryptr->size=0;
         PDEBUG("cleanup after circularBuffer index = %d \n", index);

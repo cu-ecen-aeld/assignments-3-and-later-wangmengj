@@ -19,6 +19,8 @@
 #include <pthread.h>
 #include <sys/time.h>
 
+#include "../aesd-char-driver/aesd_ioctl.h"
+
 #define SIZE_BUFFER 1000
 #define STR_PORT "9000"
 // ipv6 takes 39 characters
@@ -442,6 +444,7 @@ void * threadHandler(void * alist)
     }
 
     FILE * fOutput = NULL;
+    int fOutputFD = -1;
     // delayed openning this file
     if(NULL == fOutput)
     {
@@ -453,6 +456,7 @@ void * threadHandler(void * alist)
             list->isComplete = true;
             return NULL;
         }
+        fOutputFD = fileno(fOutput);
     }
 
     /// prepare a buffer for the transfer of the data
@@ -460,18 +464,41 @@ void * threadHandler(void * alist)
     memset(buffer, 0, SIZE_BUFFER);
 
     // point to the end of the file to start:
-    fseek(fOutput, 0L, SEEK_END); 
+    //fseek(fOutput, 0L, SEEK_END); 
 
     time_t t = time(NULL);
     pthread_mutex_lock(&(mutexFOutput));
     // receive all packages/data
     int iReceived = 0;
+    bool ifRewind = true;
     do
     {
+        ifRewind = true;
         iReceived = recv(list->sdClient, buffer, SIZE_BUFFER, MSG_DONTWAIT);
         if(0 < iReceived)
         {
-           int iRet = fwrite(buffer, 1 , iReceived, fOutput);
+            // if the data received matches with AESDCHAR_IOCSEEKTO:X,Y,
+            //  there are special operations.
+            struct aesd_seekto seekTo; 
+            if(0 == strncmp(buffer, "AESDCHAR_IOCSEEKTO:", 19))
+            {
+                DBGLOG("Found a command:%s. \n", buffer);
+                if(2 == sscanf(buffer, "AESDCHAR_IOCSEEKTO:%d,%d", 
+                    &(seekTo.write_cmd), &(seekTo.write_cmd_offset)))
+                {
+                    DBGLOG("Found a command:%s, %d,%d. \n",     
+                        buffer,seekTo.write_cmd,seekTo.write_cmd_offset);
+
+                    if(-1 != fOutputFD)
+                    {
+                        ioctl(fOutputFD, AESDCHAR_IOCSEEKTO, (unsigned long)&seekTo); 
+                        ifRewind = false;
+                        break;
+                    }
+                }
+            }
+
+            int iRet = fwrite(buffer, 1 , iReceived, fOutput);
             DBGLOG("Data saved: %d vs received: %d, %d. \n", 
                     iRet, iReceived, (int) buffer[iReceived - 1]);
 
@@ -494,8 +521,11 @@ void * threadHandler(void * alist)
     DBGLOG("Data saved other: %d , %s at %s  \n", iReceived, strerror(errno), ctime(&t));
 
     // make sure all data saved to file.
-    fflush(fOutput);
-    rewind(fOutput);
+    if (ifRewind)
+    {
+        fflush(fOutput);
+        rewind(fOutput);
+    }
 
     iReceived = 0;
     // send everything in the file to the client.
